@@ -6,6 +6,9 @@ import re
 
 import yt_dlp
 
+from .scoring import compute_video_scores
+from .storage import get_cached_channel_stats, set_cached_channel_stats
+
 API_KEY = "미공개"
 FALLBACK_CHANNELS = []
 
@@ -198,6 +201,45 @@ def _resolve_channel_id(youtube, channel_input: str) -> str:
     return ""
 
 
+def _safe_int(v):
+    try:
+        return int(v)
+    except Exception:
+        return None
+
+
+def _get_channel_subscriber_counts(youtube, channel_ids, ttl_seconds=86400):
+    ids = [c for c in dict.fromkeys(channel_ids or []) if c]
+    stats = {}
+    need_fetch = []
+    for cid in ids:
+        cached = get_cached_channel_stats(cid, ttl_seconds=ttl_seconds)
+        if isinstance(cached, dict) and "subscriber_count" in cached:
+            stats[cid] = cached.get("subscriber_count")
+        else:
+            need_fetch.append(cid)
+
+    for i in range(0, len(need_fetch), 50):
+        chunk = need_fetch[i:i+50]
+        try:
+            resp = youtube.channels().list(part="statistics", id=",".join(chunk), maxResults=50).execute()
+        except Exception:
+            continue
+        found = set()
+        for it in resp.get("items", []):
+            cid = it.get("id") or ""
+            sub = _safe_int(((it.get("statistics") or {}).get("subscriberCount")))
+            if cid:
+                stats[cid] = sub
+                set_cached_channel_stats(cid, sub, ttl_seconds=ttl_seconds)
+                found.add(cid)
+        for cid in chunk:
+            if cid not in found:
+                stats[cid] = None
+                set_cached_channel_stats(cid, None, ttl_seconds=ttl_seconds)
+    return stats
+
+
 def search_youtube_videos_api(keyword, max_results=50, time_filter="any", custom_from="", custom_to="", duration_filter="any", sort_by="views", channel_filter=""):
     max_results = max(1, min(int(max_results), 50))
     api_key = _resolve_api_key()
@@ -236,6 +278,12 @@ def search_youtube_videos_api(keyword, max_results=50, time_filter="any", custom
         return []
 
     videos_resp = youtube.videos().list(part="snippet,statistics,contentDetails", id=",".join(video_ids)).execute()
+    channel_ids = []
+    for v in videos_resp.get("items", []):
+        ch_id = ((v.get("snippet") or {}).get("channelId") or "").strip()
+        if ch_id:
+            channel_ids.append(ch_id)
+    subs_by_channel = _get_channel_subscriber_counts(youtube, channel_ids)
 
     items = []
     for v in videos_resp.get("items", []):
@@ -249,12 +297,31 @@ def search_youtube_videos_api(keyword, max_results=50, time_filter="any", custom
         channel_id = (sn.get("channelId") or "").strip()
         date_raw, date_fmt = _format_upload_datestr_iso8601_to_pair(sn.get("publishedAt") or "")
         dur_seconds = _parse_iso8601_duration_to_seconds(cd.get("duration") or "")
-        try:
-            vc = int(st.get("viewCount")) if "viewCount" in st else None
-        except Exception:
-            vc = None
+
+        vc = _safe_int(st.get("viewCount"))
+        like_count = _safe_int(st.get("likeCount"))
+        comment_count = _safe_int(st.get("commentCount"))
+        subscriber_count = subs_by_channel.get(channel_id)
+        score = compute_video_scores(vc, subscriber_count, like_count, comment_count)
+
         if title and url:
-            items.append([url, title, date_raw, date_fmt, channel_title, vc, dur_seconds, channel_id])
+            items.append([
+                url,
+                title,
+                date_raw,
+                date_fmt,
+                channel_title,
+                vc,
+                dur_seconds,
+                channel_id,
+                subscriber_count,
+                score["vs_ratio"],
+                score["hit_grade"],
+                like_count,
+                comment_count,
+                score["like_rate"],
+                score["comment_rate"],
+            ])
     if sort_by == "views":
         items.sort(key=lambda x: (0 if isinstance(x[5], int) else 1, -(x[5] or 0), x[2] or "00000000"))
     else:
@@ -356,7 +423,7 @@ def search_via_channel_uploads_fallback(api_key, keyword, channel_ids, published
             url = f"https://www.youtube.com/watch?v={vid}"
             kst_dt = _parse_rfc3339(pub_s).astimezone(dt.timezone(dt.timedelta(hours=9)))
             date_fmt = kst_dt.strftime("%Y-%m-%d %H:%M")
-            results.append((url, title, pub_s, date_fmt, ch_title, views, dur_s, ch_id))
+            results.append((url, title, pub_s, date_fmt, ch_title, views, dur_s, ch_id, None, None, "판독불가", None, None, None, None))
     if sort_by == "views":
         results.sort(key=lambda x: x[5], reverse=True)
     else:
