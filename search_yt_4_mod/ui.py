@@ -37,12 +37,15 @@ class App(tk.Frame):
         self._owns_root = master is None
         self.window = master if master is not None else tk.Tk()
         super().__init__(self.window)
-        self.window.title("YouTube 자막 추출 & 키워드 검색")
 
-        # ==== 바깥 창 크기 조절 허용 + 기본값/최소값 ====
-        self.window.resizable(True, True)     # 창 테두리 드래그로 가로/세로 리사이즈 허용
-        self.window.geometry("1280x980")      # 시작 크기
-        self.window.minsize(900, 700)         # 최소 크기(원하면 조정)
+        host_window = self.winfo_toplevel()
+        if self._owns_root:
+            host_window.title("YouTube 자막 추출 & 키워드 검색")
+
+            # ==== 바깥 창 크기 조절 허용 + 기본값/최소값 ====
+            host_window.resizable(True, True)     # 창 테두리 드래그로 가로/세로 리사이즈 허용
+            host_window.geometry("1280x980")      # 시작 크기
+            host_window.minsize(900, 700)         # 최소 크기(원하면 조정)
         self.pack(fill="both", expand=True)
         # self.maxsize(1920, 1200)     # (선택) 최대 크기 제한하려면 주석 해제
 
