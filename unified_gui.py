@@ -18,8 +18,15 @@ from search_yt_4_mod.ui import App as SearchApp
 def main() -> int:
     root = tk.Tk()
     root.title("HiddenTube 통합 도구")
-    root.geometry("1640x980")
-    root.minsize(1280, 760)
+
+    # 모니터 해상도에 맞춰 초기 창 크기를 자동 계산합니다.
+    # (너무 크게 열려서 내부 패널이 가려지는 문제 방지)
+    screen_w = root.winfo_screenwidth()
+    screen_h = root.winfo_screenheight()
+    default_w = max(1280, int(screen_w * 0.9))
+    default_h = max(760, int(screen_h * 0.9))
+    root.geometry(f"{default_w}x{default_h}")
+    root.minsize(1100, 700)
 
     notebook = ttk.Notebook(root)
     notebook.pack(fill="both", expand=True)
