@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""search_yt_4 레거시 진입점(호환용).
+"""preview3 + search_yt_4 통합 GUI 엔트리포인트(호환용)."""
 
-실제 구현은 search_yt_4_mod 패키지로 분리되었습니다.
-"""
+from unified_gui import main
 
-from search_yt_4_mod.ui import App, main
-
-__all__ = ["App", "main"]
+__all__ = ["main"]
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

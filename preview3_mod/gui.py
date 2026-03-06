@@ -11,12 +11,14 @@ from .dialogs import NodeDialog, PromptEditorDialog
 from .ui_components import DragManager
 
 class PreviewFlowGUI:
-    def __init__(self, app: PreviewFlowApp):
+    def __init__(self, app: PreviewFlowApp, master: tk.Misc | None = None):
         self.app = app
-        self.root = tk.Tk()
-        self.root.title("HiddenTube Preview Flow GUI v3")
-        self.root.geometry("1520x960")
-        self.root.minsize(1300, 840)
+        self._owns_root = master is None
+        self.root = master if master is not None else tk.Tk()
+        if self._owns_root:
+            self.root.title("HiddenTube Preview Flow GUI v3")
+            self.root.geometry("1520x960")
+            self.root.minsize(1300, 840)
 
         self.session_var = tk.StringVar(value=str(self.app.session_path))
         self.output_var = tk.StringVar(value=str(self.app.output_path))
@@ -30,7 +32,8 @@ class PreviewFlowGUI:
         self._build_ui()
         self.refresh_all()
 
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        if self._owns_root:
+            self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def _build_ui(self) -> None:
         self.root.columnconfigure(0, weight=1)
@@ -326,4 +329,5 @@ class PreviewFlowGUI:
         self.root.destroy()
 
     def run(self) -> None:
-        self.root.mainloop()
+        if self._owns_root:
+            self.root.mainloop()
