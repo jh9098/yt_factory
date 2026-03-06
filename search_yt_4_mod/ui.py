@@ -173,7 +173,7 @@ class App(tk.Frame):
         fr_a = ttk.Frame(localf); fr_a.pack(fill="x", padx=6, pady=4)
         ttk.Label(fr_a, text="최소 조회수:").pack(side="left")
         self.spin_min_views = ttk.Spinbox(fr_a, from_=0, to=10_000_000_000, width=10)
-        self.spin_min_views.set("100"); self.spin_min_views.pack(side="left", padx=(6,20))
+        self.spin_min_views.set("0"); self.spin_min_views.pack(side="left", padx=(6,20))
         ttk.Label(fr_a, text="길이(초) 최소:").pack(side="left")
         self.ent_len_min = ttk.Entry(fr_a, width=10); self.ent_len_min.pack(side="left", padx=(4,12))
         ttk.Label(fr_a, text="길이(초) 최대:").pack(side="left")
@@ -203,25 +203,21 @@ class App(tk.Frame):
 
         tools = ttk.Frame(self.results_box); tools.pack(fill="x", padx=8, pady=(8,2))
         ttk.Button(tools, text="결과 채널 저장…", command=self.open_result_channels_saver).pack(side="left")
+        ttk.Button(tools, text="선택행 지표 보기…", command=self.open_selected_row_metrics).pack(side="left", padx=(6,0))
         ttk.Label(tools, text="(검색 결과 채널 중 선택한 것만 저장소에 추가)", foreground="#666").pack(side="left", padx=(8,0))
 
-        cols = ("sel","date","kw","channel","subs","views","vs_ratio","hit_grade","like_rate","comment_rate","length","title","url")
+        cols = ("sel","date","kw","channel","views","length","title","url")
         self.tree = ttk.Treeview(self.results_box, columns=cols, show="headings", height=12)
-        self._heading_texts = {"sel":"선택","date":"업로드일","kw":"키워드","channel":"채널","subs":"구독자수","views":"조회수","vs_ratio":"V/S","hit_grade":"판독","like_rate":"좋아요율","comment_rate":"댓글율","length":"길이","title":"제목","url":"URL"}
+        self._heading_texts = {"sel":"선택","date":"업로드일","kw":"키워드","channel":"채널","views":"조회수","length":"길이","title":"제목","url":"URL"}
         for c in cols: self.tree.heading(c, text=self._heading_texts[c])
         self.tree.column("sel", width=70, anchor="center")
         self.tree.column("date", width=160, anchor="center")
         self.tree.column("kw", width=160, anchor="w")
-        self.tree.column("channel", width=220, anchor="w")
-        self.tree.column("subs", width=110, anchor="e")
+        self.tree.column("channel", width=260, anchor="w")
         self.tree.column("views", width=110, anchor="e")
-        self.tree.column("vs_ratio", width=90, anchor="e")
-        self.tree.column("hit_grade", width=80, anchor="center")
-        self.tree.column("like_rate", width=90, anchor="e")
-        self.tree.column("comment_rate", width=90, anchor="e")
         self.tree.column("length", width=100, anchor="center")
-        self.tree.column("title", width=500, anchor="w")
-        self.tree.column("url", width=300, anchor="w")
+        self.tree.column("title", width=640, anchor="w")
+        self.tree.column("url", width=360, anchor="w")
 
         vsb = ttk.Scrollbar(self.results_box, orient="vertical", command=self.tree.yview)
         hsb = ttk.Scrollbar(self.results_box, orient="horizontal", command=self.tree.xview)
@@ -255,7 +251,7 @@ class App(tk.Frame):
             # 좌우 분할선: 좌측 약 38% 정도
             total = self.hpane.winfo_width()
             if total <= 0: total = 1280
-            self.hpane.sashpos(0, int(total * 0.2))
+            self.hpane.sashpos(0, int(total * 0.38))
 
             # 상하 분할선: 결과 70% / 로그 30%
             total_h = self.vpane.winfo_height()
@@ -510,34 +506,29 @@ class App(tk.Frame):
 
     def _append_results_rows(self, kw: str, items):
         """
-        items: [url, title, date_raw, date_fmt, channel_title, view_count, dur_seconds, (opt)channel_id]
+        items: [url, title, date_raw, date_fmt, channel_title, view_count, dur_seconds, channel_id, subscriber_count, vs_ratio, hit_grade, like_count, comment_count, like_rate, comment_rate]
         """
         def do():
             for it in items:
                 row = (it + [None] * 15)[:15]
-                url, title, date_raw, date_fmt, channel, vcount, dur_sec, ch_id, subs, vs_ratio, hit_grade, _like_count, _comment_count, like_rate, comment_rate = row
+                url, title, date_raw, date_fmt, channel, vcount, dur_sec, ch_id, subs, vs_ratio, hit_grade, like_count, comment_count, like_rate, comment_rate = row
                 self.iid_seq += 1; iid = f"row_{self.iid_seq}"; self.result_state[iid] = False
-                self.result_rows.append({
-                    "iid":iid,"url":url,"title":title,"date":date_fmt or "-","kw":kw,"channel":channel or "-",
-                    "subs":subs,"views":vcount,"vs_ratio":vs_ratio,"hit_grade":hit_grade or "판독불가",
-                    "like_rate":like_rate,"comment_rate":comment_rate,"length":_fmt_hhmmss(dur_sec)
-                })
+                self.result_rows.append({"iid":iid,"url":url,"title":title,"date":date_fmt or "-","kw":kw,"channel":channel or "-","views":vcount,"length":_fmt_hhmmss(dur_sec)})
                 self.iid_meta[iid] = {
                     "dur_sec": int(dur_sec or 0),
                     "views": (int(vcount) if isinstance(vcount,int) else -1),
+                    "date_raw": date_raw or "",
+                    "channel_id": ch_id or "",
                     "subs": (int(subs) if isinstance(subs,int) else -1),
                     "vs_ratio": (float(vs_ratio) if isinstance(vs_ratio,(int,float)) else -1.0),
+                    "hit_grade": hit_grade or "판독불가",
+                    "like_count": (int(like_count) if isinstance(like_count,int) else None),
+                    "comment_count": (int(comment_count) if isinstance(comment_count,int) else None),
                     "like_rate": (float(like_rate) if isinstance(like_rate,(int,float)) else -1.0),
                     "comment_rate": (float(comment_rate) if isinstance(comment_rate,(int,float)) else -1.0),
-                    "date_raw": date_raw or "",
-                    "channel_id": ch_id or ""
                 }
                 tag = "even" if (len(self.tree.get_children()) % 2 == 0) else "odd"
-                self.tree.insert("", "end", iid=iid, values=(
-                    "☐", date_fmt or "-", kw, channel or "-", _format_views(subs), _format_views(vcount),
-                    format_ratio(vs_ratio), hit_grade or "판독불가", format_percent(like_rate), format_percent(comment_rate),
-                    _fmt_hhmmss(dur_sec), title, url
-                ), tags=(tag,))
+                self.tree.insert("", "end", iid=iid, values=("☐", date_fmt or "-", kw, channel or "-", _format_views(vcount), _fmt_hhmmss(dur_sec), title, url), tags=(tag,))
         self.after(0, do)
 
     def _update_row_stripes(self):
@@ -550,7 +541,7 @@ class App(tk.Frame):
             col_id = self.tree.identify_column(event.x)
             if col_id == "#1": self._on_header_select_all()
             else:
-                col_name = {"#1":"sel","#2":"date","#3":"kw","#4":"channel","#5":"subs","#6":"views","#7":"vs_ratio","#8":"hit_grade","#9":"like_rate","#10":"comment_rate","#11":"length","#12":"title","#13":"url"}.get(col_id,"")
+                col_name = {"#1":"sel","#2":"date","#3":"kw","#4":"channel","#5":"views","#6":"length","#7":"title","#8":"url"}.get(col_id,"")
                 if col_name: self._sort_by_column(col_name)
             return
         if region != "cell": return
@@ -572,7 +563,7 @@ class App(tk.Frame):
         if not row_id or col_id == "#1": return  # 체크박스 제외
         col_index = int(col_id[1:]) - 1
         col_name = self.tree["columns"][col_index]
-        editable = {"date","kw","channel","subs","views","vs_ratio","hit_grade","like_rate","comment_rate","length","title","url"}
+        editable = {"date","kw","channel","views","length","title","url"}
         if col_name not in editable: return
         bbox = self.tree.bbox(row_id, col_index)
         if not bbox: return
@@ -616,33 +607,6 @@ class App(tk.Frame):
                     except Exception: pass
                 elif col_name == "kw": r["kw"] = new_text
                 elif col_name == "channel": r["channel"] = new_text
-                elif col_name == "subs":
-                    try:
-                        v = int(str(new_text).replace(",", "").strip())
-                        r["subs"] = v; self.iid_meta[iid]["subs"] = v; disp_text = _format_views(v)
-                    except Exception:
-                        r["subs"] = None; self.iid_meta[iid]["subs"] = -1
-                elif col_name == "vs_ratio":
-                    try:
-                        v = float(str(new_text).strip())
-                        r["vs_ratio"] = v; self.iid_meta[iid]["vs_ratio"] = v; disp_text = format_ratio(v)
-                    except Exception:
-                        r["vs_ratio"] = None; self.iid_meta[iid]["vs_ratio"] = -1.0
-                elif col_name == "hit_grade": r["hit_grade"] = new_text
-                elif col_name == "like_rate":
-                    t = str(new_text).replace("%", "").strip()
-                    try:
-                        v = float(t) / (100.0 if "%" in str(new_text) else 1.0)
-                        r["like_rate"] = v; self.iid_meta[iid]["like_rate"] = v; disp_text = format_percent(v)
-                    except Exception:
-                        r["like_rate"] = None; self.iid_meta[iid]["like_rate"] = -1.0
-                elif col_name == "comment_rate":
-                    t = str(new_text).replace("%", "").strip()
-                    try:
-                        v = float(t) / (100.0 if "%" in str(new_text) else 1.0)
-                        r["comment_rate"] = v; self.iid_meta[iid]["comment_rate"] = v; disp_text = format_percent(v)
-                    except Exception:
-                        r["comment_rate"] = None; self.iid_meta[iid]["comment_rate"] = -1.0
                 elif col_name == "title": r["title"] = new_text
                 elif col_name == "url": r["url"] = new_text
                 self.tree.set(iid, col_name, disp_text)
@@ -696,19 +660,52 @@ class App(tk.Frame):
             if col=="date": return self.iid_meta.get(iid,{}).get("date_raw","")
             if col=="kw": return (vals[2] or "").lower()
             if col=="channel": return (vals[3] or "").lower()
-            if col=="subs": return self.iid_meta.get(iid,{}).get("subs",-1)
             if col=="views": return self.iid_meta.get(iid,{}).get("views",-1)
-            if col=="vs_ratio": return self.iid_meta.get(iid,{}).get("vs_ratio",-1.0)
-            if col=="hit_grade": return (vals[7] or "")
-            if col=="like_rate": return self.iid_meta.get(iid,{}).get("like_rate",-1.0)
-            if col=="comment_rate": return self.iid_meta.get(iid,{}).get("comment_rate",-1.0)
             if col=="length": return int(self.iid_meta.get(iid,{}).get("dur_sec",0))
-            if col=="title": return (vals[11] or "").lower()
-            if col=="url": return (vals[12] or "").lower()
+            if col=="title": return (vals[6] or "").lower()
+            if col=="url": return (vals[7] or "").lower()
             return (vals[0] or "")
         children = list(self.tree.get_children()); children.sort(key=key_func, reverse=not asc)
         for idx, iid in enumerate(children): self.tree.move(iid, "", idx)
         self._update_row_stripes(); self._clear_heading_arrows(); self._set_heading_arrow(col, asc); self._update_select_header_checkbox()
+
+    def open_selected_row_metrics(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showinfo("선택행 지표", "먼저 결과 테이블에서 행을 선택하세요.")
+            return
+        iid = sel[0]
+        vals = self.tree.item(iid, "values")
+        meta = self.iid_meta.get(iid, {})
+
+        win = tk.Toplevel(self)
+        win.title("선택행 상세 지표")
+        win.geometry("520x340")
+        win.grab_set()
+
+        frame = ttk.Frame(win)
+        frame.pack(fill="both", expand=True, padx=12, pady=12)
+
+        rows = [
+            ("업로드일", vals[1] if len(vals) > 1 else "-"),
+            ("키워드", vals[2] if len(vals) > 2 else "-"),
+            ("채널", vals[3] if len(vals) > 3 else "-"),
+            ("조회수", vals[4] if len(vals) > 4 else "-"),
+            ("길이", vals[5] if len(vals) > 5 else "-"),
+            ("제목", vals[6] if len(vals) > 6 else "-"),
+            ("URL", vals[7] if len(vals) > 7 else "-"),
+            ("구독자수", _format_views(meta.get("subs")) if isinstance(meta.get("subs"), int) else "-"),
+            ("V/S", format_ratio(meta.get("vs_ratio")) if isinstance(meta.get("vs_ratio"), (int, float)) and meta.get("vs_ratio") >= 0 else "-"),
+            ("판독", meta.get("hit_grade") or "판독불가"),
+            ("좋아요율", format_percent(meta.get("like_rate")) if isinstance(meta.get("like_rate"), (int, float)) and meta.get("like_rate") >= 0 else "-"),
+            ("댓글율", format_percent(meta.get("comment_rate")) if isinstance(meta.get("comment_rate"), (int, float)) and meta.get("comment_rate") >= 0 else "-"),
+        ]
+
+        for i, (k, v) in enumerate(rows):
+            ttk.Label(frame, text=f"{k}:", width=10).grid(row=i, column=0, sticky="nw", pady=2)
+            ttk.Label(frame, text=v, wraplength=420, justify="left").grid(row=i, column=1, sticky="nw", pady=2)
+
+        ttk.Button(frame, text="닫기", command=win.destroy).grid(row=len(rows), column=1, sticky="e", pady=(10, 0))
 
     # ---------- 쿠키 ----------
     def select_cookie(self):
@@ -814,7 +811,7 @@ class App(tk.Frame):
         channel_ids_list = self._parse_channel_ids_input(input_ch)
 
         try: min_views = int(self.spin_min_views.get().replace(",",""))
-        except Exception: min_views = 100
+        except Exception: min_views = 0
         len_min = self.ent_len_min.get().strip(); len_max = self.ent_len_max.get().strip()
         try: len_min = int(len_min) if len_min else None
         except Exception: messagebox.showwarning("형식 오류","길이(초) 최소는 숫자여야 합니다."); return
@@ -884,8 +881,8 @@ class App(tk.Frame):
         out_path = os.path.join(self.output_dir, sanitize_filename(base_name, 200) + ".txt")
         with open(out_path,"w",encoding="utf-8-sig") as f:
             for it in items_filtered:
-                url, title, _raw, date_fmt, channel, vcount, dur_sec, _cid, subs, vs_ratio, hit_grade, _lc, _cc, like_rate, comment_rate = (it + [None] * 15)[:15]
-                f.write(f"{url} | {date_fmt or '-'} | {kw} | {channel or '-'} | 구독자:{_format_views(subs)} | 조회수:{_format_views(vcount)} | V/S:{format_ratio(vs_ratio)} | 판독:{hit_grade or '판독불가'} | 좋아요율:{format_percent(like_rate)} | 댓글율:{format_percent(comment_rate)} | {title}\n")
+                url, title, _raw, date_fmt, channel, vcount, dur_sec, _cid, _subs, _vs, _hit, _lc, _cc, _lr, _cr = (it + [None] * 15)[:15]
+                f.write(f"{url} | {date_fmt or '-'} | {kw} | {channel or '-'} | {_format_views(vcount)} | {title}\n")
             f.write("\n# 길이 정보(참고)\n")
             for it in items_filtered:
                 url = it[0]; dur_sec = it[6]
