@@ -5,7 +5,7 @@ import traceback
 from pathlib import Path
 
 from .app_logic import PreviewFlowApp
-from .data import NODE_MAP, OUTPUT_FILE, SESSION_FILE
+from .data import OUTPUT_FILE, SESSION_FILE
 from .gui import PreviewFlowGUI
 
 def run_self_test() -> int:
@@ -13,13 +13,13 @@ def run_self_test() -> int:
     tmp_output = Path(".tmp_preview_output.json")
     app = PreviewFlowApp(tmp_session, tmp_output)
 
-    app.state["data"]["content_input"] = "테스트 입력"
+    app.current_project["data"]["content_input"] = "테스트 입력"
     app.mark_completed("content_input")
 
-    app.state["data"]["script_generation"] = {"title": "제목", "script": "대본"}
+    app.current_project["data"]["script_generation"] = {"title": "제목", "script": "대본"}
     app.mark_completed("script_generation")
 
-    app.state["data"]["scene_breakdown"] = {
+    app.current_project["data"]["scene_breakdown"] = {
         "scenes": [
             {"scene_id": 1, "duration_sec": 2, "visual_desc": "장면1", "narration": "내레이션1"},
             {"scene_id": 2, "duration_sec": 3, "visual_desc": "장면2", "narration": "내레이션2"},
@@ -43,7 +43,9 @@ def run_self_test() -> int:
     )
     assert ok, msg
 
-    rendered = app.render_prompt(NODE_MAP["image_prompt"], template_override=tmpl)
+    image_node = app.get_node("image_prompt")
+    assert image_node is not None
+    rendered = app.render_prompt(image_node, template_override=tmpl)
     assert "테스트 입력" in rendered
     assert "제목" in rendered
     assert "내레이션1" in rendered

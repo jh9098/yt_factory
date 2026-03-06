@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Tuple
 
-from .data import NODE_MAP, INDEX_PATTERN, SEGMENT_PATTERN, TOKEN_PATTERN, TokenMeta
+from .data import TokenMeta
 
 class TokenResolver:
     def __init__(self, node_map: Dict[str, Node]):
@@ -127,7 +127,7 @@ class TokenResolver:
 
         try:
             if require_value:
-                self.resolve_token(token_expr, app.state.get("data", {}))
+                self.resolve_token(token_expr, app.current_project.get("data", {}))
             else:
                 root_value = app._get_node_value(node_key)
                 if root_value not in (None, ""):

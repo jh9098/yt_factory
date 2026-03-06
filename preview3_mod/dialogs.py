@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import traceback
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from .data import NODE_MAP
+from .app_logic import PreviewFlowApp
+from .data import DEFAULT_PROMPTS, Node
 from .resolver import NodeFieldExplorer, TokenResolver
 from .ui_components import DragManager, TokenPanel
 
@@ -22,7 +23,9 @@ class PromptEditorDialog(tk.Toplevel):
         self.geometry("1360x840")
         self.minsize(1180, 760)
 
-        self.prompt_keys = [k for k in DEFAULT_PROMPTS.keys()]
+        self.prompt_keys = self.app.get_prompt_keys()
+        if not self.prompt_keys:
+            self.prompt_keys = list(DEFAULT_PROMPTS.keys())
         self.current_key = tk.StringVar(value=self.prompt_keys[0])
 
         self.current_node_key = self.current_key.get()
@@ -121,7 +124,7 @@ class PromptEditorDialog(tk.Toplevel):
 
         key = self.current_key.get()
         self.current_node_key = key
-        text = self.app.state["prompts"].get(key, "")
+        text = self.app.get_prompt(key)
 
         self.text_widget.delete("1.0", "end")
         self.text_widget.insert("1.0", text)
@@ -171,14 +174,14 @@ class PromptEditorDialog(tk.Toplevel):
             messagebox.showerror("오류", msg)
             return
 
-        self.app.state["prompts"][key] = new_value
+        self.app.set_prompt(key, new_value)
         self.app.save()
         self.master_gui.log(f"[완료] 프롬프트 저장: {key}")
         messagebox.showinfo("완료", f"{key} 프롬프트를 저장했습니다.")
 
     def _restore_default(self) -> None:
         key = self.current_key.get()
-        self.app.state["prompts"][key] = DEFAULT_PROMPTS[key]
+        self.app.set_prompt(key, DEFAULT_PROMPTS.get(key, ""))
         self.app.save()
         self._load_current_prompt()
         self.master_gui.log(f"[복원] 기본 프롬프트 복원: {key}")
@@ -340,7 +343,7 @@ class NodeDialog(tk.Toplevel):
         self.prompt_text.focus_set()
 
     def _load_initial_data(self) -> None:
-        data = self.app.state["data"]
+        data = self.app.current_project["data"]
 
         if self.node.key == "content_input" and self.content_text is not None:
             existing = self.app._to_pretty_json_or_text(data.get("content_input", ""))
@@ -349,7 +352,7 @@ class NodeDialog(tk.Toplevel):
             return
 
         if self.prompt_text is not None and self.node.prompt_key:
-            prompt = self.app.state["prompts"].get(self.node.prompt_key, "")
+            prompt = self.app.get_prompt(self.node.prompt_key)
             self.prompt_text.delete("1.0", "end")
             self.prompt_text.insert("1.0", prompt)
 
@@ -368,7 +371,7 @@ class NodeDialog(tk.Toplevel):
         if self.prompt_text is None or not self.node.prompt_key:
             return
 
-        prompt = self.app.state["prompts"].get(self.node.prompt_key, "")
+        prompt = self.app.get_prompt(self.node.prompt_key)
         self.prompt_text.delete("1.0", "end")
         self.prompt_text.insert("1.0", prompt)
         self.master_gui.log(f"[프롬프트 갱신] {self.node.name}")
@@ -449,7 +452,7 @@ class NodeDialog(tk.Toplevel):
             messagebox.showwarning("경고", "내용입력이 비어 있습니다.")
             return
 
-        self.app.state["data"]["content_input"] = content
+        self.app.current_project["data"]["content_input"] = content
         self.app.mark_completed("content_input")
         self.app.save()
 
@@ -479,7 +482,7 @@ class NodeDialog(tk.Toplevel):
 
         parsed = self.app._safe_parse_json(raw_response)
 
-        self.app.state["data"][self.node.state_key] = parsed
+        self.app.current_project["data"][self.node.state_key] = parsed
         self.app.mark_completed(self.node.key)
         self.app.save()
 
@@ -497,7 +500,7 @@ class NodeDialog(tk.Toplevel):
         messagebox.showinfo("완료", f"{self.node.name} 결과를 저장했습니다.")
 
     def _save_ffmpeg_output_file(self) -> None:
-        if "ffmpeg_json" not in self.app.state["data"]:
+        if "ffmpeg_json" not in self.app.current_project["data"]:
             messagebox.showwarning("안내", "먼저 ffmpeg_json 노드 응답을 저장하세요.")
             return
         try:
