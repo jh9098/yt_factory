@@ -345,6 +345,23 @@ class PreviewFlowGUI:
             self.log_text.insert("end", f"[{datetime.now().strftime('%H:%M:%S')}] {message}\n")
             self.log_text.see("end")
 
+    def receive_script_from_extract(self, title: str, script_text: str) -> None:
+        clean_title = (title or "제목없음").strip()
+        clean_body = (script_text or "").strip()
+        if not clean_body:
+            self.log("[WARN] 전달받은 스크립트 내용이 비어 있어 반영하지 않았습니다.")
+            return
+
+        current = str(self.app.current_project.get("data", {}).get("content_input", "")).strip()
+        block = f"[스크립트] {clean_title}\n{clean_body}"
+        merged = f"{current}\n\n---\n\n{block}" if current else block
+
+        self.app.current_project["data"]["content_input"] = merged
+        self.app.mark_completed("content_input")
+        self.app.save()
+        self.refresh_all()
+        self.log(f"[연동] 내용입력에 스크립트 반영: {clean_title}")
+
     def on_close(self) -> None:
         try:
             self.app.save()

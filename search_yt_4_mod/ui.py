@@ -5,6 +5,7 @@ import os
 import re
 import threading
 import tkinter as tk
+from typing import Callable, Optional
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from tkcalendar import DateEntry
@@ -32,7 +33,7 @@ from .storage import (
 
 
 class App(tk.Frame):
-    def __init__(self, master=None):
+    def __init__(self, master=None, script_transfer_callback: Optional[Callable[[str, str], None]] = None):
         self._owns_root = master is None
         self.window = master if master is not None else tk.Tk()
         super().__init__(self.window)
@@ -47,6 +48,7 @@ class App(tk.Frame):
 
         self.cookie_path = ""
         self.output_dir = OUTPUT_DIR_DEFAULT
+        self.script_transfer_callback = script_transfer_callback
 
         # 결과/상태
         self.result_rows = []; self.result_state = {}; self.iid_seq = 0; self.iid_meta = {}
@@ -733,6 +735,7 @@ class App(tk.Frame):
                 if text:
                     with open(out_path,"w",encoding="utf-8-sig") as f: f.write(text)
                     self._safe_log(f"[OK] 저장 완료: {out_path}")
+                    self.after(0, lambda t=title, body=text, path=out_path: self._show_script_popup(t, body, path))
                 else:
                     self._safe_log(f"[WARN] 자막 없음. (제목: {title})")
             except Exception as e:
@@ -740,6 +743,51 @@ class App(tk.Frame):
             finally:
                 done += 1; self._set_progress(value=done)
         self._safe_log("\n[DONE] 자막 추출 완료."); self._set_btns_enabled(extracting=True)
+
+    def _show_script_popup(self, title: str, text: str, out_path: str) -> None:
+        popup = tk.Toplevel(self.window)
+        popup.title(f"추출 스크립트: {title}")
+        popup.geometry("900x640")
+        popup.minsize(720, 520)
+
+        frame = ttk.Frame(popup, padding=10)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(2, weight=1)
+
+        ttk.Label(frame, text=f"제목: {title}", font=("맑은 고딕", 10, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(frame, text=f"저장 파일: {out_path}", foreground="#666").grid(row=1, column=0, sticky="w", pady=(4, 8))
+
+        text_widget = scrolledtext.ScrolledText(frame, wrap="word", font=("Consolas", 10))
+        text_widget.grid(row=2, column=0, sticky="nsew")
+        text_widget.insert("1.0", text)
+
+        btns = ttk.Frame(frame)
+        btns.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+
+        def copy_script() -> None:
+            payload = text_widget.get("1.0", "end-1c")
+            popup.clipboard_clear()
+            popup.clipboard_append(payload)
+            popup.update()
+            self._safe_log(f"[복사] 스크립트 복사 완료: {title}")
+            messagebox.showinfo("완료", "스크립트를 클립보드에 복사했습니다.")
+
+        def send_to_preview() -> None:
+            if self.script_transfer_callback is None:
+                messagebox.showwarning("안내", "Preview 전달 콜백이 연결되지 않았습니다.")
+                return
+            payload = text_widget.get("1.0", "end-1c").strip()
+            if not payload:
+                messagebox.showwarning("안내", "전달할 스크립트 내용이 비어 있습니다.")
+                return
+            self.script_transfer_callback(title, payload)
+            self._safe_log(f"[전달] Preview로 스크립트 전달: {title}")
+            messagebox.showinfo("완료", "Preview 내용입력으로 스크립트를 전달했습니다.")
+
+        ttk.Button(btns, text="클립보드 복사", command=copy_script).pack(side="left")
+        ttk.Button(btns, text="Preview로 보내기", command=send_to_preview).pack(side="left", padx=(8, 0))
+        ttk.Button(btns, text="닫기", command=popup.destroy).pack(side="right")
 
     # ---------- 키워드 검색 ----------
     def _parse_channel_ids_input(self, s: str):
