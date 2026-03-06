@@ -257,20 +257,29 @@ class App(tk.Frame):
         self.txt_log = scrolledtext.ScrolledText(self.log_frame, height=12, wrap="word", font=("Consolas", 10), state="normal")
         self.txt_log.pack(fill="both", expand=True, padx=10, pady=(0,10))
 
-        # 초기 분할선 위치 조정(사용자 화면에 따라 한번 배치 후 자유롭게 변경 가능)
-        self.after(50, self._place_initial_sashes)
+        # 초기 분할선 위치 조정(레이아웃이 완전히 그려진 뒤 재시도 포함)
+        self.after_idle(self._place_initial_sashes)
+        self.after(180, self._place_initial_sashes)
 
     def _place_initial_sashes(self):
         try:
-            # 좌우 분할선: 좌측 약 38% 정도
-            total = self.hpane.winfo_width()
-            if total <= 0: total = 1280
-            self.hpane.sashpos(0, int(total * 0.38))
+            # 좌우 분할선: 좌(자막) 40% / 우(검색) 60%
+            total = self.hpane.winfo_width() or self.winfo_width()
+            if total <= 0:
+                total = 1280
+            left = int(total * 0.40)
+            self.hpane.sashpos(0, left)
 
-            # 상하 분할선: 결과 70% / 로그 30%
-            total_h = self.vpane.winfo_height()
-            if total_h <= 0: total_h = 600
-            self.vpane.sashpos(0, int(total_h * 0.7))
+            # 상하 분할선: 결과가 최소 360px 보이도록 보정
+            total_h = self.vpane.winfo_height() or self.winfo_height()
+            if total_h <= 0:
+                total_h = 700
+
+            results_min = 360
+            log_default = int(total_h * 0.28)
+            top_h = max(results_min, total_h - log_default)
+            top_h = min(top_h, total_h - 180)  # 로그 영역 최소 높이 180px 보장
+            self.vpane.sashpos(0, top_h)
         except Exception:
             pass
 
