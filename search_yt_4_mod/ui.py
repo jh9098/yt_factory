@@ -148,6 +148,20 @@ class App(tk.Frame):
         self.cmb_duration.pack(side="left", padx=(6,10))
         ttk.Label(row3, text="short<4분, medium 4~20분, long>20분", foreground="#666").pack(side="left")
 
+        # 4행(대박 영상 필터)
+        row4 = ttk.Frame(opts); row4.pack(fill="x", padx=6, pady=4)
+        ttk.Label(row4, text="대박영상 필터:").pack(side="left")
+        self.var_hit_filter = tk.StringVar(value="any")
+        self.cmb_hit_filter = ttk.Combobox(
+            row4,
+            textvariable=self.var_hit_filter,
+            state="readonly",
+            width=14,
+            values=["any", "hit", "superhit"],
+        )
+        self.cmb_hit_filter.pack(side="left", padx=(6,10))
+        ttk.Label(row4, text="any=전체, hit=대박 이상(V/S≥1), superhit=초대박(V/S≥2)", foreground="#666").pack(side="left")
+
         # custom 기간
         self.custom_frame = ttk.Frame(opts)
         self.custom_frame.pack(fill="x", padx=6, pady=(0,6))
@@ -833,19 +847,24 @@ class App(tk.Frame):
             custom_from_iso = _to_iso_utc_datetime(cfrom_date, from_hour, from_min)
             custom_to_iso = _to_iso_utc_datetime(cto_date, to_hour, to_min)
 
-        os.makedirs(self.output_dir, exist_ok=True)
         self._set_btns_enabled(searching=False); self._set_progress(0, maximum=len(keywords))
         nice_sort = "조회수순" if sort_by=="views" else "최신순"
         nice_time = {"any":"전체","day":"최근 24시간","week":"최근 1주","month":"최근 1개월","custom":f"직접입력({cfrom_tag or '...'} ~ {cto_tag or '...'})"}[time_filter]
         nice_duration = {"any":"전체 길이(API)","short":"짧음(<4분)","medium":"중간(4~20분)","long":"김(>20분)"}[duration_filter]
+        hit_filter = self.var_hit_filter.get() or "any"
+        nice_hit = {"any": "전체", "hit": "대박 이상", "superhit": "초대박만"}.get(hit_filter, "전체")
         local_len = f"길이(초): {len_min if len_min is not None else '-'} ~ {len_max if len_max is not None else '-'}"
         self._clear_results_table()
-        self._safe_log(f"[START/SEARCH] {len(keywords)}개 키워드 | 정렬:{nice_sort} | 기간:{nice_time} | API길이:{nice_duration} | 최소조회수≥{min_views} | {local_len} | 최대결과={limit} | 채널갯수={len(channel_ids_list) or '전체'}")
+        self._safe_log(
+            f"[START/SEARCH] {len(keywords)}개 키워드 | 정렬:{nice_sort} | 기간:{nice_time} | "
+            f"API길이:{nice_duration} | 대박필터:{nice_hit} | 최소조회수≥{min_views} | "
+            f"{local_len} | 최대결과={limit} | 채널갯수={len(channel_ids_list) or '전체'}"
+        )
 
         threading.Thread(
             target=self._process_keywords_api,
             args=(keywords, limit, time_filter, cfrom_tag, cto_tag, duration_filter, sort_by,
-                  min_views, len_min, len_max, channel_ids_list, custom_from_iso, custom_to_iso),
+                  min_views, len_min, len_max, hit_filter, channel_ids_list, custom_from_iso, custom_to_iso),
             daemon=True
         ).start()
 
@@ -863,7 +882,20 @@ class App(tk.Frame):
             merged.sort(key=lambda x: x[2] or "00000000", reverse=True)
         return merged[:limit]
 
-    def _filter_items_locally(self, items, min_views, len_min, len_max):
+    def _passes_hit_filter(self, hit_filter, hit_grade, vs_ratio):
+        if hit_filter == "any":
+            return True
+        if hit_filter == "hit":
+            if isinstance(vs_ratio, (int, float)):
+                return vs_ratio >= 1.0
+            return hit_grade in ("대박", "초대박")
+        if hit_filter == "superhit":
+            if isinstance(vs_ratio, (int, float)):
+                return vs_ratio >= 2.0
+            return hit_grade == "초대박"
+        return True
+
+    def _filter_items_locally(self, items, min_views, len_min, len_max, hit_filter):
         filtered = []
         for it in items:
             row = (it + [None] * 15)[:15]
@@ -871,30 +903,13 @@ class App(tk.Frame):
             if isinstance(vcount,int) and vcount < min_views: continue
             if (len_min is not None) and (dur_sec < len_min): continue
             if (len_max is not None) and (dur_sec > len_max): continue
+            if not self._passes_hit_filter(hit_filter, hit_grade, vs_ratio): continue
             filtered.append([url, title, date_raw, date_fmt, channel, vcount, dur_sec, ch_id, subs, vs_ratio, hit_grade, like_count, comment_count, like_rate, comment_rate])
         return filtered
 
-    def _save_results_to_file(self, kw, items_filtered, time_filter, cfrom_tag, cto_tag, duration_filter, sort_by):
-        safe_kw = sanitize_filename(kw)
-        tf_tag = time_filter if time_filter!="custom" else f"custom_{(cfrom_tag or 'NA')}_{(cto_tag or 'NA')}"
-        base_name = f"{safe_kw}_검색결과_{tf_tag}_{duration_filter}_{('views' if sort_by=='views' else 'date')}"
-        out_path = os.path.join(self.output_dir, sanitize_filename(base_name, 200) + ".txt")
-        with open(out_path,"w",encoding="utf-8-sig") as f:
-            for it in items_filtered:
-                url, title, _raw, date_fmt, channel, vcount, dur_sec, _cid, _subs, _vs, _hit, _lc, _cc, _lr, _cr = (it + [None] * 15)[:15]
-                f.write(f"{url} | {date_fmt or '-'} | {kw} | {channel or '-'} | {_format_views(vcount)} | {title}\n")
-            f.write("\n# 길이 정보(참고)\n")
-            for it in items_filtered:
-                url = it[0]; dur_sec = it[6]
-                f.write(f"{url} | length={_fmt_hhmmss(dur_sec)} ({dur_sec}s)\n")
-            f.write("\n# URL 목록\n")
-            for it in items_filtered:
-                f.write(f"{it[0]}\n")
-        return out_path
-
     def _process_keywords_api(self, keywords, limit, time_filter, cfrom_tag, cto_tag,
                               duration_filter, sort_by, min_views, len_min, len_max,
-                              channel_ids_list, custom_from_iso, custom_to_iso):
+                              hit_filter, channel_ids_list, custom_from_iso, custom_to_iso):
         done = 0
         for kw in keywords:
             try:
@@ -943,12 +958,11 @@ class App(tk.Frame):
                 self._safe_log(f"[ERROR] 키워드 '{kw}' 처리 실패: {e}"); items = []
 
             try:
-                items_filtered = self._filter_items_locally(items, min_views, len_min, len_max)
+                items_filtered = self._filter_items_locally(items, min_views, len_min, len_max, hit_filter)
                 self._append_results_rows(kw, items_filtered)
-                out_path = self._save_results_to_file(kw, items_filtered, time_filter, cfrom_tag, cto_tag, duration_filter, sort_by)
-                self._safe_log(f"[OK] {len(items_filtered)}개 저장 완료 (원본 {len(items)}개) → {out_path}")
+                self._safe_log(f"[OK] {len(items_filtered)}개 결과 반영 완료 (원본 {len(items)}개)")
             except Exception as e:
-                self._safe_log(f"[ERROR] 결과 저장/반영 실패: {e}")
+                self._safe_log(f"[ERROR] 결과 반영 실패: {e}")
             finally:
                 done += 1; self._set_progress(value=done)
 
