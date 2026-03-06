@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""HiddenTube Preview Flow GUI v3 엔트리포인트."""
+"""preview3 + search_yt_4 통합 GUI 엔트리포인트."""
 
-from preview3_mod.cli import main
+from unified_gui import main
 
 
 if __name__ == "__main__":
