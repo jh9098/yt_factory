@@ -25,6 +25,7 @@ class PreviewFlowGUI:
         self.data_text: Optional[tk.Text] = None
         self.log_text: Optional[tk.Text] = None
         self.summary_label: Optional[ttk.Label] = None
+        self.search_tool_window: Optional[tk.Toplevel] = None
 
         self._build_ui()
         self.refresh_all()
@@ -56,6 +57,7 @@ class PreviewFlowGUI:
         ttk.Button(top_btn_frame, text="다음 실행 노드 열기", command=self.open_next_runnable_node).pack(side="left", padx=(12, 0))
         ttk.Button(top_btn_frame, text="세션 초기화", command=self.reset_session).pack(side="left", padx=(12, 0))
         ttk.Button(top_btn_frame, text="새로고침", command=self.refresh_all).pack(side="left", padx=(6, 0))
+        ttk.Button(top_btn_frame, text="YouTube 검색 도구", command=self.open_search_tool).pack(side="left", padx=(12, 0))
 
         main_paned = ttk.Panedwindow(self.root, orient="horizontal")
         main_paned.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
@@ -239,6 +241,33 @@ class PreviewFlowGUI:
         self.refresh_all()
         self.log(f"[데이터 삭제] {node.name}")
         messagebox.showinfo("완료", f"{node.name} 데이터를 삭제했습니다.")
+
+    def open_search_tool(self) -> None:
+        if self.search_tool_window and self.search_tool_window.winfo_exists():
+            self.search_tool_window.lift()
+            self.search_tool_window.focus_force()
+            return
+
+        try:
+            from search_yt_4 import App as SearchYTApp
+
+            self.search_tool_window = tk.Toplevel(self.root)
+            self.search_tool_window.title("YouTube 자막 추출 & 키워드 검색")
+            self.search_tool_window.geometry("1280x980")
+            search_app = SearchYTApp(master=self.search_tool_window)
+            self.search_tool_window.protocol(
+                "WM_DELETE_WINDOW",
+                lambda: self._close_search_tool(search_app),
+            )
+            self.log("[도구] YouTube 검색 도구 창을 열었습니다.")
+        except Exception as exc:
+            self.log(f"[오류] YouTube 검색 도구 열기 실패: {exc}")
+            messagebox.showerror("오류", f"YouTube 검색 도구를 열지 못했습니다.\n{exc}")
+
+    def _close_search_tool(self, _search_app) -> None:
+        if self.search_tool_window and self.search_tool_window.winfo_exists():
+            self.search_tool_window.destroy()
+        self.search_tool_window = None
 
     # ---------- refresh ----------
     def refresh_all(self) -> None:
