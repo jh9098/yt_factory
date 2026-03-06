@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 
 DATA_DIR = "data"
 CHANNEL_STORE_PATH = os.path.join(DATA_DIR, "channels.json")
 OUTPUT_DIR_DEFAULT = "추출"
+CHANNEL_STATS_CACHE_PATH = os.path.join(DATA_DIR, "channel_stats_cache.json")
 
 
 def sanitize_filename(name: str, max_len: int = 150) -> str:
@@ -54,3 +56,49 @@ def remove_channels_from_store(ids) -> None:
     keep = [c for c in data.get("channels", []) if c.get("id") not in set(ids)]
     data["channels"] = keep
     save_channel_store(data)
+
+
+def load_channel_stats_cache() -> dict:
+    _ensure_data_dir()
+    try:
+        with open(CHANNEL_STATS_CACHE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict) and isinstance(data.get("channels"), dict):
+                return data
+    except Exception:
+        pass
+    return {"channels": {}}
+
+
+def save_channel_stats_cache(data: dict) -> None:
+    _ensure_data_dir()
+    with open(CHANNEL_STATS_CACHE_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def get_cached_channel_stats(channel_id: str, ttl_seconds: int = 86400):
+    if not channel_id:
+        return None
+    data = load_channel_stats_cache()
+    row = (data.get("channels") or {}).get(channel_id)
+    if not isinstance(row, dict):
+        return None
+    ts = row.get("fetched_at", 0)
+    if not isinstance(ts, (int, float)):
+        return None
+    if time.time() - ts > max(1, int(ttl_seconds)):
+        return None
+    return row
+
+
+def set_cached_channel_stats(channel_id: str, subscriber_count, ttl_seconds: int = 86400):
+    if not channel_id:
+        return
+    data = load_channel_stats_cache()
+    channels = data.setdefault("channels", {})
+    channels[channel_id] = {
+        "subscriber_count": (int(subscriber_count) if isinstance(subscriber_count, int) else None),
+        "fetched_at": int(time.time()),
+        "ttl_seconds": int(ttl_seconds),
+    }
+    save_channel_stats_cache(data)
