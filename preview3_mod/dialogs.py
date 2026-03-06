@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import traceback
 from typing import Any, Optional
+from pathlib import Path
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from .app_logic import PreviewFlowApp
 from .data import DEFAULT_PROMPTS, Node
@@ -249,6 +250,7 @@ class NodeDialog(tk.Toplevel):
         btn_frame = ttk.Frame(parent)
         btn_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0))
 
+        ttk.Button(btn_frame, text="텍스트 파일 업로드", command=self._upload_content_text_files).pack(side="left")
         ttk.Button(btn_frame, text="저장", command=self._save_content_input).pack(side="left")
         ttk.Button(btn_frame, text="닫기", command=self.destroy).pack(side="right")
 
@@ -459,6 +461,41 @@ class NodeDialog(tk.Toplevel):
         self.master_gui.refresh_all()
         self.master_gui.log("[완료] 내용입력 저장")
         messagebox.showinfo("완료", "내용입력을 저장했습니다.")
+
+    def _upload_content_text_files(self) -> None:
+        if self.content_text is None:
+            return
+
+        paths = filedialog.askopenfilenames(
+            title="업로드할 텍스트 파일 선택",
+            filetypes=[("텍스트 파일", "*.txt"), ("모든 파일", "*.*")],
+        )
+        if not paths:
+            return
+
+        blocks: list[str] = []
+        for path in paths:
+            try:
+                with open(path, "r", encoding="utf-8-sig") as f:
+                    raw = f.read().strip()
+            except Exception:
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        raw = f.read().strip()
+                except Exception as exc:
+                    messagebox.showerror("오류", f"파일 읽기 실패:\n{path}\n\n{exc}")
+                    return
+
+            filename = Path(path).name
+            blocks.append(f"[파일] {filename}\n{raw}" if raw else f"[파일] {filename}\n(빈 파일)")
+
+        existing = self.content_text.get("1.0", "end-1c").strip()
+        merged_body = "\n\n\n".join(blocks)
+        merged = f"{existing}\n\n---\n\n{merged_body}" if existing else merged_body
+
+        self.content_text.delete("1.0", "end")
+        self.content_text.insert("1.0", merged)
+        self.master_gui.log(f"[업로드] 내용입력 텍스트 파일 {len(paths)}개 반영")
 
     def _save_prompt_response(self) -> None:
         if self.prompt_text is None or self.response_text is None or self.node.state_key is None:

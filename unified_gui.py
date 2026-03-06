@@ -38,7 +38,7 @@ def main() -> int:
     preview_gui = PreviewFlowGUI(preview_app, master=preview_tab)
     preview_gui.log("통합 GUI에서 Preview Flow 탭 로드 완료")
 
-    SearchApp(master=search_tab)
+    SearchApp(master=search_tab, script_transfer_callback=preview_gui.receive_script_from_extract)
 
     def on_close() -> None:
         preview_gui.on_close()
